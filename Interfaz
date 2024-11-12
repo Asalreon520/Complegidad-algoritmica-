@@ -30,5 +30,4 @@ combo_algoritmo.pack(pady=5)
 boton_iniciar = tk.Button(ventana, text="Iniciar Juego", command=iniciar_juego)
 boton_iniciar.pack(pady=10)
 
-# Iniciar el bucle de la ventana
 ventana.mainloop()

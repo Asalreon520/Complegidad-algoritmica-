@@ -1,0 +1,125 @@
+import pygame
+
+ANCHO, ALTURA = 600, 600
+FILAS, COLUMNA = 8, 8
+TAMAGNO_CUADRADO = ANCHO // COLUMNA
+
+# Colores
+ROJO = (255, 0, 0)
+NEGRO = (0, 0, 0)
+BLANCO = (255, 255, 255)
+GRIS = (128, 128, 128)
+AZUL = (59, 131, 189)
+
+CORONA = pygame.transform.scale(pygame.image.load("Corona.webp"), (45, 25))  # Para las piezas rojas
+
+class Piezas:
+    RELLENO = 15
+    BORDE = 2
+    def __init__(self, color, fil, col):
+        self.fil = fil
+        self.col = col
+        self.color = color
+        self.king = False
+        self.x = 0
+        self.y = 0# Si la pieza es una dama
+        self.cal_pos()
+
+    def calc_pos(self):
+        self.x =TAMAGNO_CUADRADO * self.col + TAMAGNO_CUADRADO // 2
+        self.y =TAMAGNO_CUADRADO * self.fil + TAMAGNO_CUADRADO // 2
+    
+    def make_dama(self):
+        self.king=True
+
+    def draw(self, win): #DIBUJA LA PIEZA
+        radio = TAMAGNO_CUADRADO//2 - self.RELLENO
+        pygame.draw.circle(win, GRIS, (self.x,self.y),radio+self.BORDE)
+        pygame.draw.circle(win,self.color,(self.x,self.y),radio)
+        if self.king:
+            win.blit(CORONA,(self.x-CORONA.get_width()//2, self.y - CORONA.get_height()//2))
+    
+    def move(self,fil,col):
+        self.fil=fil
+        self.col=col
+        self.calc_pos
+
+    def __repr__(self):
+        return str(self.color)
+    
+class Tablero:
+    def __init__(self):
+        self.tablero = []
+        self.ROJO_left = self.BLANCO_left = 12
+        self.ROJO_Kings = self.BLANCO_kings = 0
+        self.crear_tablero()
+
+    def draw_cuadrados(self,win):
+        win.fill(NEGRO)
+        for fill in range(FILAS):
+            for col in range(fil % 2, COLUMNA,2):
+                pygame.draw.rect(win,ROJO,fil*TAMAGNO_CUADRADO,col*TAMAGNO_CUADRADO,TAMAGNO_CUADRADO,TAMAGNO_CUADRADO)
+
+    def move(self,pieza,fil,col):
+        self.tablero[pieza.fil][pieza.col],self.tablero[fil][col]=self.tablero[fil][col],self.tablero[pieza.fil][pieza.col]
+        pieza.move(fil,col)
+
+        if fil == FILAS - 1 or fil == 0:
+            pieza.make_king()
+            if pieza.color == BLANCO:
+                self.BLANCO_kings +=1
+            else:
+                self.ROJO_Kings +=1 
+
+    def get_pieza(self, fil, col):
+        return self.tablero[fil][col]
+    
+    def crear_tablero(self):
+        for fil in range(FILAS):
+            self.tablero.append([])
+            for col in range(COLUMNA):
+                if col % 2 == ((fil + 1) % 2):
+                    if fil < 3:
+                        self.tablero[fil].append(Piezas(fil,col,BLANCO))
+                    elif fil > 4:
+                        self.tablero[fil].append(Piezas(fil,col,ROJO))
+                    else:
+                        self.tablero[fil].append(0)
+                else:
+                    self.tablero[fil].append(0)
+    
+    def draw(self, win):
+        self.draw_cuadrados(win)
+        for fil in range(FILAS):
+            for col in range(COLUMNA):
+                pieza = self.tablero[fil][col]
+                if pieza != 0:
+                    pieza.draw(win)
+
+    def eliminar(self, piezas):
+        for pieza in piezas:
+            self.tablero[pieza.fil][pieza.col]= 0
+            if pieza != 0:
+                if pieza.color == ROJO:
+                    self.ROJO_left -= 1
+                else:
+                    self.BLANCO_left -= 1
+
+    def ganador(self):
+        if self.ROJO_left <= 0:
+            return BLANCO
+        elif self.BLANCO_left <= 0:
+            return ROJO
+        return None
+    
+    def get_movimientos_validos(self,pieza):
+        movimientos = {}
+        izq = pieza.col - 1
+        der = pieza.col + 1
+        fil = pieza.fil 
+
+        if pieza.color == ROJO or pieza.king: 
+            movimientos.update(self.atravesar_izq(fil -1,max(fil-3,-1),-1,pieza.color,izq))
+            movimientos.update(self.atravesar_der(fil -1,max(fil-3,-1),-1,pieza.color,der))
+        
+        if pieza.color == Blanco or pieza.king

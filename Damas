@@ -76,6 +76,7 @@ def main():
 
     seleccionada = None
     posibles_jugadas = []
+    turno = NEGRO  # Comienza el jugador negro
 
     # Bucle principal del juego
     jugando = True
@@ -94,21 +95,23 @@ def main():
                 # Verificar si se hace clic en una pieza
                 for pieza in piezas:
                     if pieza.rect.collidepoint(x, y):
-                        pieza_seleccionada = pieza
+                        # Solo seleccionar piezas del turno actual
+                        if pieza.color == turno:
+                            pieza_seleccionada = pieza
                         break
 
                 if pieza_seleccionada:
                     seleccionada = pieza_seleccionada
-                    posibles_jugadas = obtener_posibles_jugadas(seleccionada, piezas)
+                    posibles_jugadas = obtener_posibles_jugadas(seleccionada)
                 else:
                     if seleccionada and (fila, columna) in posibles_jugadas:
-                        # Verificar si es un salto (comer)
-                        pieza_comida = obtener_pieza_comida(seleccionada, fila, columna, piezas)
-                        if pieza_comida:
-                            piezas.remove(pieza_comida)  # Eliminar la pieza comida
-                        seleccionada.mover(fila, columna)
-                        seleccionada = None
-                        posibles_jugadas = []
+                        # Verificar si la casilla está vacía antes de mover
+                        if not hay_pieza_en(fila, columna, piezas):
+                            seleccionada.mover(fila, columna)
+                            # Cambiar turno después de mover
+                            turno = ROJO if turno == NEGRO else NEGRO
+                            seleccionada = None
+                            posibles_jugadas = []
 
         # Dibujar el tablero y las piezas
         dibujar_tablero(pantalla, piezas)
@@ -121,30 +124,23 @@ def main():
         pygame.display.update()
 
 # Función para obtener las posibles jugadas
-def obtener_posibles_jugadas(pieza, piezas):
+def obtener_posibles_jugadas(pieza):
     jugadas = []
     direcciones = [(-1, -1), (-1, 1)] if pieza.color == NEGRO else [(1, -1), (1, 1)]
     for dir_fila, dir_columna in direcciones:
         nueva_fila = pieza.fila + dir_fila
         nueva_columna = pieza.columna + dir_columna
         if 0 <= nueva_fila < FILAS and 0 <= nueva_columna < COLUMNA:
-            # Verificar si el salto es posible (salto sobre una pieza contraria)
-            pieza_comida = obtener_pieza_comida(pieza, nueva_fila, nueva_columna, piezas)
-            if pieza_comida:
-                salto_fila = nueva_fila + dir_fila
-                salto_columna = nueva_columna + dir_columna
-                if 0 <= salto_fila < FILAS and 0 <= salto_columna < COLUMNA:
-                    jugadas.append((salto_fila, salto_columna))
-            else:
-                jugadas.append((nueva_fila, nueva_columna))
+            jugadas.append((nueva_fila, nueva_columna))
+
     return jugadas
 
-# Función para obtener la pieza que puede ser comida
-def obtener_pieza_comida(pieza, fila, columna, piezas):
-    for p in piezas:
-        if p.fila == fila and p.columna == columna:
-            return p
-    return None
+# Función para verificar si ya hay una pieza en la casilla
+def hay_pieza_en(fila, columna, piezas):
+    for pieza in piezas:
+        if pieza.fila == fila and pieza.columna == columna:
+            return True  # Ya hay una pieza en esa casilla
+    return False  # La casilla está vacía
 
 # Ejecutar el juego
 if __name__ == "__main__":

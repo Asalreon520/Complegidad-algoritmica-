@@ -17,7 +17,7 @@ class Piezas:
     RELLENO = 15
     BORDE = 2
 
-    def _init_(self, color, fil, col):
+    def __init__(self, color, fil, col):
         self.fil = fil
         self.col = col
         self.color = color
@@ -46,7 +46,7 @@ class Piezas:
         self.calc_pos()
 
 class Tablero:
-    def _init_(self):
+    def __init__(self):
         self.tablero = []
         self.ROJO_left = self.NEGRO_left = 12
         self.ROJO_Kings = self.NEGRO_kings = 0
@@ -121,7 +121,7 @@ class Tablero:
         return movimientos
 
 class Juego:
-    def _init_(self, win):
+    def __init__(self, win):
         self.win = win
         self._init()
 
@@ -225,5 +225,5 @@ def main():
 
     pygame.quit()
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     main()

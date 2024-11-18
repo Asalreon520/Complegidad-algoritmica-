@@ -1,0 +1,410 @@
+import tkinter as tk
+from tkinter import ttk, messagebox
+from PIL import Image, ImageTk
+import pygame
+import random
+from copy import deepcopy
+
+ANCHO, ALTURA = 600, 600
+FILAS, COLUMNAS = 8, 8
+PERIMETRO_CUADRADO = ANCHO // COLUMNAS
+
+MARRON_OSCURO = (139, 69, 19)
+KHAKI = (240, 230, 140)
+ROJO = (255, 0, 0)
+NEGRO = (0, 0, 0)
+GRIS = (128, 128, 128)
+AZUL = (59, 131, 189)
+CORONA = pygame.transform.scale(pygame.image.load("corona.png"), (45, 25))
+
+class Piezas:
+    RELLENO = 15
+    BORDE = 2
+
+    def __init__(self, color, fil, col):
+        self.fil = fil
+        self.col = col
+        self.color = color
+        self.king = False
+        self.x = 0
+        self.y = 0
+        self.calc_pos()
+
+    def calc_pos(self):
+        self.x = PERIMETRO_CUADRADO * self.col + PERIMETRO_CUADRADO // 2
+        self.y = PERIMETRO_CUADRADO * self.fil + PERIMETRO_CUADRADO // 2
+
+    def make_king(self):
+        self.king = True
+
+    def draw(self, win):
+        radio = PERIMETRO_CUADRADO // 2 - self.RELLENO
+        pygame.draw.circle(win, GRIS, (self.x, self.y), radio + self.BORDE)
+        pygame.draw.circle(win, self.color, (self.x, self.y), radio)
+        if self.king:
+            win.blit(CORONA, (self.x - CORONA.get_width() // 2, self.y - CORONA.get_height() // 2))
+
+    def move(self, fil, col):
+        self.fil = fil
+        self.col = col
+        self.calc_pos()
+
+class Tablero:
+    def __init__(self):
+        self.tablero = []
+        self.ROJO_left = self.NEGRO_left = 12
+        self.ROJO_Kings = self.NEGRO_kings = 0
+        self.crear_tablero()
+
+    def draw_cuadrados(self, win):
+        win.fill(KHAKI)
+        for fil in range(FILAS):
+            for col in range(fil % 2, COLUMNAS, 2):
+                pygame.draw.rect(win, MARRON_OSCURO, (col * PERIMETRO_CUADRADO, fil * PERIMETRO_CUADRADO, PERIMETRO_CUADRADO, PERIMETRO_CUADRADO))
+
+    def crear_tablero(self):
+        for fil in range(FILAS):
+            self.tablero.append([])
+            for col in range(COLUMNAS):
+                if col % 2 == ((fil + 1) % 2):
+                    if fil < 3:
+                        self.tablero[fil].append(Piezas(NEGRO, fil, col))
+                    elif fil > 4:
+                        self.tablero[fil].append(Piezas(ROJO, fil, col))
+                    else:
+                        self.tablero[fil].append(0)
+                else:
+                    self.tablero[fil].append(0)
+
+    def draw(self, win):
+        self.draw_cuadrados(win)
+        for fil in range(FILAS):
+            for col in range(COLUMNAS):
+                pieza = self.tablero[fil][col]
+                if pieza != 0:
+                    pieza.draw(win)
+
+    def move(self, pieza, fil, col):
+        self.tablero[pieza.fil][pieza.col], self.tablero[fil][col] = self.tablero[fil][col], self.tablero[pieza.fil][pieza.col]
+        pieza.move(fil, col)
+        if (pieza.color == ROJO and fil == 0) or (pieza.color == NEGRO and fil == FILAS - 1):
+            pieza.make_king()
+
+    def obtener_movimientos_validos(self, pieza):
+        movimientos = {}
+        fil, col = pieza.fil, pieza.col
+        direcciones = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
+        movimientos.update(self._explorar(pieza, fil, col, direcciones))
+        return movimientos
+
+    def _explorar(self, pieza, fil, col, direcciones):
+        movimientos = {}
+
+        if not pieza.king:
+            if pieza.color == ROJO:
+                direcciones = [(-1, -1), (-1, 1)]  # hacia arriba
+            else:
+                direcciones = [(1, -1), (1, 1)]  # hacia abajo
+
+        for dfil, dcol in direcciones:
+            f, c = fil + dfil, col + dcol
+            if 0 <= f < FILAS and 0 <= c < COLUMNAS:
+                casilla_destino = self.tablero[f][c]
+                if casilla_destino == 0:
+                    # Movimiento simple
+                    movimientos[(f, c)] = []
+                elif casilla_destino.color != pieza.color:
+                    # Detectar salto
+                    salto_f, salto_c = f + dfil, c + dcol
+                    if (
+                        0 <= salto_f < FILAS
+                        and 0 <= salto_c < COLUMNAS
+                        and self.tablero[salto_f][salto_c] == 0
+                    ):
+                        movimientos[(salto_f, salto_c)] = [(f, c)]
+        return movimientos
+
+    def evaluate(self):
+        return self.ROJO_left - self.NEGRO_left
+
+class Juego:
+    def __init__(self, win, algoritmo):
+        self.win = win
+        self.algoritmo = algoritmo
+        self._init()
+
+    def _init(self):
+        self.selected = None
+        self.tablero = Tablero()
+        self.turn = ROJO
+        self.movimientos_validos = {}
+
+    def update(self):
+        self.tablero.draw(self.win)
+        self.draw_movimientos_validos(self.movimientos_validos)
+        pygame.display.update()
+
+    def reset(self):
+        self._init()
+
+    def select(self, fil, col):
+        if self.selected:
+            result = self._move(fil, col)
+            if not result:
+                self.selected = None
+                self.select(fil, col)
+        pieza = self.tablero.tablero[fil][col]
+        if pieza != 0 and pieza.color == self.turn:
+            self.selected = pieza
+            self.movimientos_validos = self.tablero.obtener_movimientos_validos(pieza)
+            return True
+        return False
+
+    def _move(self, fil, col):
+        if (fil, col) in self.movimientos_validos:
+            self.tablero.move(self.selected, fil, col)
+            if self.movimientos_validos[(fil, col)]:
+                for f, c in self.movimientos_validos[(fil, col)]:
+                    self.tablero.tablero[f][c] = 0
+                    if self.selected.color == ROJO:
+                        self.tablero.NEGRO_left -= 1
+                    else:
+                        self.tablero.ROJO_left -= 1
+            
+            if (self.selected.color == ROJO and fil == 0) or (self.selected.color == NEGRO and fil == FILAS - 1):
+                self.selected.make_king()
+            self.change_turn()
+            return True
+        return False
+
+    def change_turn(self):
+        self.selected = None
+        self.movimientos_validos = {}
+        self.turn = NEGRO if self.turn == ROJO else ROJO
+        self.check_winner()
+
+    def check_winner(self):
+        if self.tablero.ROJO_left <= 0:
+            self.show_winner_message("¡Negro ganó!")
+            return True
+        elif self.tablero.NEGRO_left <= 0:
+            self.show_winner_message("¡Rojo ganó!")
+            return True
+        return False
+
+    def show_winner_message(self, message):
+        pygame.quit()
+        root = tk.Tk()
+        root.withdraw()  
+        messagebox.showinfo("Juego Terminado", message)
+        root.destroy()
+
+    def draw_movimientos_validos(self, movimientos):
+        for mov in movimientos:
+            fil, col = mov
+            pygame.draw.circle(self.win, AZUL, (col * PERIMETRO_CUADRADO + PERIMETRO_CUADRADO // 2, fil * PERIMETRO_CUADRADO + PERIMETRO_CUADRADO // 2), 15)
+
+def get_fil_col_from_mouse(pos):
+    x, y = pos
+    fil = y // PERIMETRO_CUADRADO
+    col = x // PERIMETRO_CUADRADO
+    return fil, col
+
+def backtracking(juego):
+    def minimax(tablero, depth, max_player):
+        if depth == 0 or juego.check_winner():
+            return tablero.evaluate(), tablero
+
+        if max_player:
+            max_eval = float('-inf')
+            best_move = None
+            for move in get_all_moves(tablero, NEGRO):
+                evaluation = minimax(move, depth - 1, False)[0]
+                max_eval = max(max_eval, evaluation)
+                if max_eval == evaluation:
+                    best_move = move
+            return max_eval, best_move
+        else:
+            min_eval = float('inf')
+            best_move = None
+            for move in get_all_moves(tablero, ROJO):
+                evaluation = minimax(move, depth - 1, True)[0]
+                min_eval = min(min_eval, evaluation)
+                if min_eval == evaluation:
+                    best_move = move
+            return min_eval, best_move
+
+    def get_all_moves(tablero, color):
+        moves = []
+        for fil in range(FILAS):
+            for col in range(COLUMNAS):
+                pieza = tablero.tablero[fil][col]
+                if pieza != 0 and pieza.color == color:
+                    valid_moves = tablero.obtener_movimientos_validos(pieza)
+                    for move, skip in valid_moves.items():
+                        temp_tablero = deepcopy(tablero)
+                        temp_pieza = temp_tablero.tablero[fil][col]
+                        new_tablero = simulate_move(temp_pieza, move, temp_tablero, skip)
+                        moves.append(new_tablero)
+        return moves
+
+    def simulate_move(pieza, move, tablero, skip):
+        tablero.move(pieza, move[0], move[1])
+        if skip:
+            for f, c in skip:
+                tablero.tablero[f][c] = 0
+                if pieza.color == ROJO:
+                    tablero.NEGRO_left -= 1
+                else:
+                    tablero.ROJO_left -= 1
+        return tablero
+
+    _, best_move = minimax(juego.tablero, 3, True)
+    if best_move:
+        juego.tablero = best_move
+        juego.change_turn()
+
+def programacion_dinamica(juego):
+    # Crear una tabla para almacenar los resultados de los subproblemas
+    dp_table = {}
+
+    def dp(tablero, depth, max_player):
+        key = (str(tablero.tablero), depth, max_player)
+        if key in dp_table:
+            return dp_table[key]
+
+        if depth == 0 or juego.check_winner():
+            return tablero.evaluate(), tablero
+
+        if max_player:
+            max_eval = float('-inf')
+            best_move = None
+            for move in get_all_moves(tablero, NEGRO):
+                evaluation = dp(move, depth - 1, False)[0]
+                max_eval = max(max_eval, evaluation)
+                if max_eval == evaluation:
+                    best_move = move
+            dp_table[key] = (max_eval, best_move)
+            return max_eval, best_move
+        else:
+            min_eval = float('inf')
+            best_move = None
+            for move in get_all_moves(tablero, ROJO):
+                evaluation = dp(move, depth - 1, True)[0]
+                min_eval = min(min_eval, evaluation)
+                if min_eval == evaluation:
+                    best_move = move
+            dp_table[key] = (min_eval, best_move)
+            return min_eval, best_move
+
+    def get_all_moves(tablero, color):
+        moves = []
+        for fil in range(FILAS):
+            for col in range(COLUMNAS):
+                pieza = tablero.tablero[fil][col]
+                if pieza != 0 and pieza.color == color:
+                    valid_moves = tablero.obtener_movimientos_validos(pieza)
+                    for move, skip in valid_moves.items():
+                        temp_tablero = deepcopy(tablero)
+                        temp_pieza = temp_tablero.tablero[fil][col]
+                        new_tablero = simulate_move(temp_pieza, move, temp_tablero, skip)
+                        moves.append(new_tablero)
+        return moves
+
+    def simulate_move(pieza, move, tablero, skip):
+        tablero.move(pieza, move[0], move[1])
+        if skip:
+            for f, c in skip:
+                tablero.tablero[f][c] = 0
+                if pieza.color == ROJO:
+                    tablero.NEGRO_left -= 1
+                else:
+                    tablero.ROJO_left -= 1
+        return tablero
+
+    _, best_move = dp(juego.tablero, 3, True)
+    if best_move:
+        juego.tablero = best_move
+        juego.change_turn()
+
+def iniciar_juego():
+    jugador1 = entrada_jugador1.get()
+    algoritmo = combo_algoritmo.get()
+    
+    if not jugador1:
+        print("Por favor, ingresa el nombre del Jugador 1.")
+        return
+    if algoritmo == "Seleccionar Algoritmo":
+        print("Por favor, selecciona un algoritmo para el Jugador 2.")
+        return
+    
+    print(f"Jugador 1: {jugador1}")
+    print(f"Jugador 2 seleccionó el algoritmo: {algoritmo}")
+    
+    ventana.destroy()
+    iniciar_juego_damas(algoritmo)
+
+def iniciar_juego_damas(algoritmo):
+    pygame.init()
+    win = pygame.display.set_mode((ANCHO, ALTURA))
+    pygame.display.set_caption("Damas")
+
+    icono = pygame.image.load("UPC.png")
+    pygame.display.set_icon(icono)
+
+    juego = Juego(win, algoritmo)
+    running = True
+
+    while running:
+        juego.update()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                pos = pygame.mouse.get_pos()
+                fil, col = get_fil_col_from_mouse(pos)
+                juego.select(fil, col)
+        if juego.turn == NEGRO:
+            if algoritmo == "Backtracking":
+                backtracking(juego)
+            elif algoritmo == "Programación Dinámica":
+                programacion_dinamica(juego)
+
+    pygame.quit()
+
+ventana = tk.Tk()
+ventana.title("Hito 03")
+
+icono_tk = Image.open("UPC.png")
+icono_tk = ImageTk.PhotoImage(icono_tk)
+ventana.iconphoto(False, icono_tk)
+
+ventana.geometry("250x250")
+
+imagen_fondo = Image.open("U.png")
+imagen_fondo = imagen_fondo.resize((600, 400), Image.LANCZOS)
+imagen_fondo_tk = ImageTk.PhotoImage(imagen_fondo)
+
+label_fondo = tk.Label(ventana, image=imagen_fondo_tk)
+label_fondo.place(x=0, y=0, relwidth=1, relheight=1)
+
+titulo = tk.Label(ventana, text="HITO 03", font=("Anson", 18, "bold italic"), bg="white", fg="black")
+titulo.pack(pady=10)
+
+label_jugador1 = tk.Label(ventana, text="Jugador 1:", bg="white", fg="black")
+label_jugador1.pack()
+
+entrada_jugador1 = tk.Entry(ventana)
+entrada_jugador1.pack(pady=10)  
+
+label_jugador2 = tk.Label(ventana, text="Algoritmo:", bg="white", fg="black")
+label_jugador2.pack()   
+
+combo_algoritmo = ttk.Combobox(ventana, values=["Backtracking", "Programación Dinámica"])
+combo_algoritmo.set("Seleccionar Algoritmo")
+combo_algoritmo.pack(pady=10)
+
+boton_iniciar = tk.Button(ventana, text="Iniciar Juego", command=iniciar_juego)
+boton_iniciar.pack(pady=10)
+
+ventana.mainloop()
